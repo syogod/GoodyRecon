@@ -15,8 +15,8 @@ def print_red(msg):
 def print_cyan(msg):
     print(Fore.CYAN + msg + Style.RESET_ALL)
 
-def prompt_input(message, color=Fore.CYAN):
-    return input(color + message + Style.RESET_ALL)
+def prompt_input(message, default, color=Fore.CYAN):
+    return input(color + message + Style.RESET_ALL) or default
 
 def valid_ip(address):
     try:

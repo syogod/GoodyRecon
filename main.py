@@ -4,7 +4,7 @@ from utils import print_green, print_yellow, print_red, prompt_input
 
 def main():
 
-    target = prompt_input("Enter the target IP or hostname: ").strip()
+    target = prompt_input("Enter the target IP or hostname: ", False).strip()
     nmap_output = run_nmap_scan(target)
     print(nmap_output)
 
@@ -21,9 +21,9 @@ def main():
 
     print("\nQueued Actions:")
     for i, action in enumerate(action_queue, 1):
-        print(f"  {i}. {action['description']}")
+        print_green(f"  {i}. {action['description']}")
 
-    confirm = input("\nRun all actions? [y/N]: ").lower()
+    confirm = prompt_input("\nRun all actions? [Y/n]: ", "Y").lower()
     if confirm == 'y':
         execute_queue(action_queue)
     else:

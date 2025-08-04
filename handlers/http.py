@@ -3,7 +3,6 @@ from urllib.parse import urlparse
 import re
 import os
 import subprocess
-import hashlib
 import threading
 import time
 import sys
@@ -22,12 +21,15 @@ def spinner(stop_event):
 def get_soft_404_fingerprint(url):
     try:
         r = requests.get(url, timeout=5, verify=False)
-        return {
-            "status": r.status_code,
-            "length": len(r.content),
-            "hash": hashlib.sha1(r.content).hexdigest(),
-            "snippet": r.text[:200].strip()
-        }
+        if r.status_code == 404:
+            print_green("[*] No soft 404 detected")
+            return None
+        else:
+            return {
+                "status": r.status_code,
+                "length": len(r.content),
+                "snippet": r.text[:200].strip()
+            }
     except Exception as e:
         print_red(f"[!] Error fingerprinting soft 404: {e}")
         return None
@@ -36,24 +38,24 @@ def analyze_soft_404(url):
     print_green(f"[*] Checking for soft 404 behavior at {url}")
     fingerprint = get_soft_404_fingerprint(url + "/nonexistent-xyz123")
     if fingerprint:
-        print_green(f"    Status: {fingerprint['status']}")
-        print_green(f"    Length: {fingerprint['length']}")
-        print_green(f"    SHA1  : {fingerprint['hash']}")
-        print_green("    Snippet:")
-        print_green("    " + fingerprint['snippet'].replace('\n', '\n    '))
+        print_yellow("[!] Potential soft 404 behavior detected")
+        print_yellow(f"    Status: {fingerprint['status']}")
+        print_yellow(f"    Length: {fingerprint['length']}")
+        print_yellow("    Snippet:")
+        print_yellow("    " + fingerprint['snippet'].replace('\n', '\n    '))
 
-        exclude = input("Use --exclude-length for this? [y/N]: ").lower()
+        exclude = prompt_input("Use --exclude-length for this? [Y/n]: ","Y").lower()
         if exclude == 'y':
             return fingerprint['length']
     return None
 
-def gobuster_scan(url, exclude_length=None, follow_redirects=False):
+def gobuster_scan(url, exclude_length=None, ignore_redirects=False):
     args = [
         "gobuster", "dir", "-u", url,
         "-w", "/usr/share/wordlists/dirb/common.txt"
     ]
-    if follow_redirects:
-        args.append("-r")
+    if ignore_redirects:
+        args += ["-b", "302,404"]
     if exclude_length:
         args += ["--exclude-length", str(exclude_length)]
 
@@ -86,10 +88,10 @@ def gobuster_scan(url, exclude_length=None, follow_redirects=False):
 
     if ("Error: the server returns a status code that matches the provided options" in stderr and
         "=> 302" in stderr):
-        if not follow_redirects:
+        if not ignore_redirects:
             print_yellow("[!] Gobuster failed due to 302 redirects.")
-            print_yellow("[~] Retrying with -r (follow redirects)...")
-            return gobuster_scan(url, exclude_length=exclude_length, follow_redirects=True)
+            print_yellow("[~] Retrying with -b (ignore redirects)...")
+            return gobuster_scan(url, exclude_length=exclude_length, ignore_redirects=True)
         else:
             print_red("[!] Gobuster still failed even with -r:")
             print(stderr)
@@ -123,13 +125,13 @@ def check_redirect_and_offer_hosts_entry(url, ip):
         if response.status_code == 302:
             location = response.headers.get("Location", "")
             if location.startswith("http"):
-                redirected_host = location.split("//")[1].split("/")[0]
+                redirected_host = urlparse(location).hostname
                 if redirected_host != ip:
-                    print_yellow(f"[!] Detected 302 redirect from IP to hostname: {redirected_host}")
+                    print_yellow(f"[!] Detected 302 redirect from {ip} to hostname: {redirected_host}")
                     if is_hostname_in_hosts(redirected_host):
                         print_green(f"[~] Hostname {redirected_host} already in /etc/hosts. Skipping.")
                     else:
-                        choice = prompt_input(f"[?] Add {ip} {redirected_host} to /etc/hosts? (y/n): ").lower()
+                        choice = prompt_input(f"[?] Add {ip} {redirected_host} to /etc/hosts? (Y/n): ", "Y").lower()
                         if choice == "y":
                             try:
                                 with open("/etc/hosts", "a") as f:
@@ -161,7 +163,7 @@ def handle_http(target, port, queue, host_override, service="http"):
     print_green("  2. Queue subdomain check")
     print_green("  3. Queue browser open")
     print_green("  4. Skip")
-    choice = prompt_input("Select an option: ")
+    choice = prompt_input("Select an option: ", 4)
 
     if choice == "1":
         exclude_length = analyze_soft_404(url)
