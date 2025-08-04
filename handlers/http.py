@@ -12,11 +12,11 @@ def spinner(stop_event):
     animation = "|/-\\"
     idx = 0
     while not stop_event.is_set():
-        sys.stdout.write(f"\r[*] Gobuster running... {animation[idx % len(animation)]}")
+        sys.stdout.write(f"\r\033[32m[*] Gobuster running... {animation[idx % len(animation)]}")
         sys.stdout.flush()
         idx += 1
         time.sleep(0.1)
-    sys.stdout.write("\r[*] Gobuster finished.               \n")
+    sys.stdout.write("\r\033[32m[*] Gobuster finished.               \n")
 
 def get_soft_404_fingerprint(url):
     try:
@@ -28,18 +28,18 @@ def get_soft_404_fingerprint(url):
             "snippet": r.text[:200].strip()
         }
     except Exception as e:
-        print(f"[!] Error fingerprinting soft 404: {e}")
+        print(f"\033[32m[!] Error fingerprinting soft 404: {e}")
         return None
     
 def analyze_soft_404(url):
-    print(f"[*] Checking for soft 404 behavior at {url}")
+    print(f"\033[32m[*] Checking for soft 404 behavior at {url}")
     fingerprint = get_soft_404_fingerprint(url + "/nonexistent-xyz123")
     if fingerprint:
-        print(f"    Status: {fingerprint['status']}")
-        print(f"    Length: {fingerprint['length']}")
-        print(f"    SHA1  : {fingerprint['hash']}")
-        print("    Snippet:")
-        print("    " + fingerprint['snippet'].replace('\n', '\n    '))
+        print(f"\033[32m    Status: {fingerprint['status']}")
+        print(f"\033[32m    Length: {fingerprint['length']}")
+        print(f"\033[32m    SHA1  : {fingerprint['hash']}")
+        print("\033[32m    Snippet:")
+        print("\033[32m    " + fingerprint['snippet'].replace('\n', '\n    '))
 
         exclude = input("Use --exclude-length for this? [y/N]: ").lower()
         if exclude == 'y':
@@ -56,7 +56,7 @@ def gobuster_scan(url, exclude_length=None, follow_redirects=False):
     if exclude_length:
         args += ["--exclude-length", str(exclude_length)]
 
-    print(f"[~] Running Gobuster on {url}...")
+    print(f"\033[32m[~] Running Gobuster on {url}...")
 
     stop_event = threading.Event()
     spinner_thread = threading.Thread(target=spinner, args=(stop_event,))
@@ -86,14 +86,14 @@ def gobuster_scan(url, exclude_length=None, follow_redirects=False):
     if ("Error: the server returns a status code that matches the provided options" in stderr and
         "=> 302" in stderr):
         if not follow_redirects:
-            print("[!] Gobuster failed due to 302 redirects.")
-            print("[~] Retrying with -r (follow redirects)...")
+            print("\033[32m[!] Gobuster failed due to 302 redirects.")
+            print("\033[32m[~] Retrying with -r (follow redirects)...")
             return gobuster_scan(url, exclude_length=exclude_length, follow_redirects=True)
         else:
-            print("[!] Gobuster still failed even with -r:")
+            print("\033[32m[!] Gobuster still failed even with -r:")
             print(stderr)
     elif "Error: the server returns a status code that matches the provided options" in stderr:
-        print("[!] Gobuster encountered soft 404 behavior (non-302).")
+        print("\033[32m[!] Gobuster encountered soft 404 behavior (non-302).")
         print(stderr)
 
 
@@ -112,36 +112,36 @@ def is_hostname_in_hosts(hostname):
         with open("/etc/hosts", "r") as f:
             return any(hostname in line for line in f if not line.strip().startswith("#"))
     except Exception as e:
-        print(f"[!] Failed to read /etc/hosts: {e}")
+        print(f"\033[32m[!] Failed to read /etc/hosts: {e}")
         return False
     
 def check_redirect_and_offer_hosts_entry(url, ip):
     try:
-        print(f"[~] Checking for redirects on {url}")
+        print(f"\033[32m[~] Checking for redirects on {url}")
         response = requests.get(url, timeout=5, allow_redirects=False)
         if response.status_code == 302:
             location = response.headers.get("Location", "")
             if location.startswith("http"):
                 redirected_host = location.split("//")[1].split("/")[0]
                 if redirected_host != ip:
-                    print(f"[!] Detected 302 redirect from IP to hostname: {redirected_host}")
+                    print(f"\033[32m[!] Detected 302 redirect from IP to hostname: {redirected_host}")
                     if is_hostname_in_hosts(redirected_host):
-                        print(f"[~] Hostname {redirected_host} already in /etc/hosts. Skipping.")
+                        print(f"\033[32m[~] Hostname {redirected_host} already in /etc/hosts. Skipping.")
                     else:
                         choice = input(f"[?] Add {ip} {redirected_host} to /etc/hosts? (y/n): ").lower()
                         if choice == "y":
                             try:
                                 with open("/etc/hosts", "a") as f:
                                     f.write(f"{ip} {redirected_host}\n")
-                                print("[+] Added to /etc/hosts.")
+                                print("\033[32m[+] Added to /etc/hosts.")
                                 return redirected_host
                             except PermissionError:
-                                print("[!] Permission denied. Try running with sudo.")
+                                print("\033[32m[!] Permission denied. Try running with sudo.")
                         else:
-                            print("[~] Skipping hosts file update.")
+                            print("\033[32m[~] Skipping hosts file update.")
                     return redirected_host
     except Exception as e:
-        print(f"[!] Redirect check failed: {e}")
+        print(f"\033[32m[!] Redirect check failed: {e}")
     return None
 
 def handle_http(target, port, queue, host_override, service="http"):
@@ -154,12 +154,12 @@ def handle_http(target, port, queue, host_override, service="http"):
 
     url = f"{protocol}://{used_host}:{port}"
 
-    print(f"[HTTP] Options for {used_host}:{port}")
-    print("  1. Queue gobuster for directories")
-    print("  2. Queue subdomain check")
-    print("  3. Queue browser open")
-    print("  4. Skip")
-    choice = input("Select an option: ")
+    print(f"\033[32m[HTTP] Options for {used_host}:{port}")
+    print("\033[32m  1. Queue gobuster for directories")
+    print("\033[32m  2. Queue subdomain check")
+    print("\033[32m  3. Queue browser open")
+    print("\033[32m  4. Skip")
+    choice = input("\033[32mSelect an option: ")
 
     url = f"http://{used_host}:{port}"
     if port == 443:
@@ -183,4 +183,4 @@ def handle_http(target, port, queue, host_override, service="http"):
             "function": lambda: subprocess.run(["xdg-open", url])
         })
     else:
-        print("[*] Skipping...")
+        print("\033[32m[*] Skipping...")
