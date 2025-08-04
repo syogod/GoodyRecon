@@ -1,13 +1,15 @@
 from scanner import run_nmap_scan, parse_nmap_output
 from port_handler import handle_port, execute_queue
+from utils import print_green, print_yellow, print_red, prompt_input
 
 def main():
-    target = input("Enter the target IP or hostname: ").strip()
+
+    target = prompt_input("Enter the target IP or hostname: ").strip()
     nmap_output = run_nmap_scan(target)
     print(nmap_output)
 
     open_ports = parse_nmap_output(nmap_output)
-    action_queue = []
+    action_queue = []   # queue of actions to be taken for each open port
     host_override = {}
 
     for port, service in open_ports:
