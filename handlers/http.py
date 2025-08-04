@@ -4,6 +4,19 @@ import re
 import os
 import subprocess
 import hashlib
+import threading
+import time
+import sys
+
+def spinner(stop_event):
+    animation = "|/-\\"
+    idx = 0
+    while not stop_event.is_set():
+        sys.stdout.write(f"\r[*] Gobuster running... {animation[idx % len(animation)]}")
+        sys.stdout.flush()
+        idx += 1
+        time.sleep(0.1)
+    sys.stdout.write("\r[*] Gobuster finished.               \n")
 
 def get_soft_404_fingerprint(url):
     try:
@@ -35,8 +48,7 @@ def analyze_soft_404(url):
 
 def gobuster_scan(url, exclude_length=None, follow_redirects=False):
     args = [
-        "gobuster", "dir",
-        "-u", url,
+        "gobuster", "dir", "-u", url,
         "-w", "/usr/share/wordlists/dirb/common.txt"
     ]
     if follow_redirects:
@@ -44,26 +56,45 @@ def gobuster_scan(url, exclude_length=None, follow_redirects=False):
     if exclude_length:
         args += ["--exclude-length", str(exclude_length)]
 
-    print(f"[~] Running Gobuster{' with -r' if follow_redirects else ''}: {url}")
-    result = subprocess.run(args, capture_output=True, text=True)
+    print(f"[~] Running Gobuster on {url}...")
 
-    # Check stderr for specific 302 error
-    stderr = result.stderr
+    stop_event = threading.Event()
+    spinner_thread = threading.Thread(target=spinner, args=(stop_event,))
+    spinner_thread.start()
+
+    process = subprocess.Popen(
+        args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1
+    )
+
+    try:
+        # Print each line as Gobuster outputs it
+        for line in process.stdout:
+            if line.strip():
+                print("\r" + " " * 60 + "\r", end="")  # Clear spinner line
+                print(line.strip())
+        process.wait()
+    finally:
+        stop_event.set()
+        spinner_thread.join()
+
+    stderr = process.stderr.read()
+
     if ("Error: the server returns a status code that matches the provided options" in stderr and
         "=> 302" in stderr):
         if not follow_redirects:
             print("[!] Gobuster failed due to 302 redirects.")
             print("[~] Retrying with -r (follow redirects)...")
-            return gobuster_scan(url, follow_redirects=True)
+            return gobuster_scan(url, exclude_length=exclude_length, follow_redirects=True)
         else:
             print("[!] Gobuster still failed even with -r:")
             print(stderr)
     elif "Error: the server returns a status code that matches the provided options" in stderr:
-        print("[!] Gobuster encountered a soft 404 behavior (e.g., 200s).")
-        print("[~] You'll need to manually tune status codes or lengths.")
+        print("[!] Gobuster encountered soft 404 behavior (non-302).")
         print(stderr)
-    else:
-        print(result.stdout)
 
 
 def get_protocol_and_url(target, port, service):
@@ -76,35 +107,47 @@ def get_protocol_and_url(target, port, service):
     url = f"{protocol}://{target}:{port}"
     return protocol, url
 
-
+def is_hostname_in_hosts(hostname):
+    try:
+        with open("/etc/hosts", "r") as f:
+            return any(hostname in line for line in f if not line.strip().startswith("#"))
+    except Exception as e:
+        print(f"[!] Failed to read /etc/hosts: {e}")
+        return False
+    
 def check_redirect_and_offer_hosts_entry(url, ip):
     try:
-        print(f"[*] Checking for 302 redirect on {url}...")
-        response = requests.get(url, allow_redirects=False, timeout=5, verify=False)
+        print(f"[~] Checking for redirects on {url}")
+        response = requests.get(url, timeout=5, allow_redirects=False)
         if response.status_code == 302:
             location = response.headers.get("Location", "")
-            parsed = urlparse(location)
-
-            if parsed.hostname and not re.match(r"^\d{1,3}(\.\d{1,3}){3}$", parsed.hostname):
-                print(f"[!] Detected redirect to: {parsed.hostname}")
-                add = input(f"Add '{parsed.hostname} {ip}' to /etc/hosts? [y/N]: ").lower()
-                if add == 'y':
-                    with open("/etc/hosts", "a") as f:
-                        f.write(f"\n{ip} {parsed.hostname}")
-                    print("[+] Entry added to /etc/hosts.")
-                else:
-                    print("[*] Skipped /etc/hosts entry.")
-                return parsed.hostname
-        else:
-            print(f"[*] No redirect found. Status: {response.status_code}")
+            if location.startswith("http"):
+                redirected_host = location.split("//")[1].split("/")[0]
+                if redirected_host != ip:
+                    print(f"[!] Detected 302 redirect from IP to hostname: {redirected_host}")
+                    if is_hostname_in_hosts(redirected_host):
+                        print(f"[~] Hostname {redirected_host} already in /etc/hosts. Skipping.")
+                    else:
+                        choice = input(f"[?] Add {ip} {redirected_host} to /etc/hosts? (y/n): ").lower()
+                        if choice == "y":
+                            try:
+                                with open("/etc/hosts", "a") as f:
+                                    f.write(f"{ip} {redirected_host}\n")
+                                print("[+] Added to /etc/hosts.")
+                                return redirected_host
+                            except PermissionError:
+                                print("[!] Permission denied. Try running with sudo.")
+                        else:
+                            print("[~] Skipping hosts file update.")
+                    return redirected_host
     except Exception as e:
-        print(f"[!] Error checking redirect: {e}")
+        print(f"[!] Redirect check failed: {e}")
     return None
 
 def handle_http(target, port, queue, host_override, service="http"):
-    protocol, url = get_protocol_and_url(target, port, service)
+    protocol, base_url = get_protocol_and_url(target, port, service)
 
-    hostname = check_redirect_and_offer_hosts_entry(target, port)
+    hostname = check_redirect_and_offer_hosts_entry(base_url, target)
     if hostname:
         host_override[port] = hostname
     used_host = host_override.get(port, target)
