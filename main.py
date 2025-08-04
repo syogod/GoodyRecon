@@ -8,9 +8,10 @@ def main():
 
     open_ports = parse_nmap_output(nmap_output)
     action_queue = []
+    host_override = {}
 
     for port, service in open_ports:
-        handle_port(target, port, service, action_queue)
+        handle_port(target, port, service, action_queue, host_override)
 
     if not action_queue:
         print("\n[*] No actions selected. Exiting.")
