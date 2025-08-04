@@ -2,8 +2,8 @@ from handlers import http
 
 def handle_port(target, port, service, queue, host_override):
     print(f"\n[+] Detected open port {port}/tcp ({service})")
-    if service in ["http", "http-alt", "https"]:
-        http.handle_http(target, port, queue, host_override)
+    if "http" in service:
+        http.handle_http(target, port, queue, host_override, service)
     else:
         print(f"[!] No handler for service: {service}")
 
