@@ -227,6 +227,20 @@ def gobuster_vhost(domain):
     if stderr:
         print_red(stderr)
 
+def check_robots_txt(url):
+    # Check for robots.txt and print its contents if found
+    robots_url = url.rstrip('/') + '/robots.txt'
+    print_green(f"[~] Checking for robots.txt at {robots_url} ...")
+    try:
+        resp = requests.get(robots_url, timeout=5, verify=False)
+        if resp.status_code == 200:
+            print_green("[+] robots.txt found!\n")
+            print(resp.text)
+        else:
+            print_yellow(f"[-] robots.txt not found (HTTP {resp.status_code})")
+    except Exception as e:
+        print_red(f"[!] Error fetching robots.txt: {e}")
+
 def handle_http(target, port, queue, host_override, service="http"):
     # Main handler for HTTP/HTTPS services
     protocol, base_url = get_protocol_and_url(target, port, service)
@@ -246,14 +260,16 @@ def handle_http(target, port, queue, host_override, service="http"):
         {"key": "2", "desc": "Queue subdomain check"},
         {"key": "3", "desc": "Queue vhost scan"},
         {"key": "4", "desc": "Queue browser open"},
-        {"key": "5", "desc": "Done (finish selecting actions for this port)"}
+        {"key": "5", "desc": "Check robots.txt"},
+        {"key": "6", "desc": "Done (finish selecting actions for this port)"}
     ]
     # Map action keys to unique queue descriptions for this port
     action_descriptions = {
         "1": f"Gobuster scan on {url}",
         "2": f"Subdomain check for {target}",
         "3": f"Vhost scan for {target}",
-        "4": f"Open {url} in browser"
+        "4": f"Open {url} in browser",
+        "5": f"Check robots.txt on {url}"
     }
 
     # Track which actions have been queued for this port
@@ -273,7 +289,7 @@ def handle_http(target, port, queue, host_override, service="http"):
 
         print_green(f"[HTTP] Options for {target}:{port}")
         for action in actions:
-            mark = " [*]" if action["key"] in queued_keys and action["key"] != "5" else ""
+            mark = " [*]" if action["key"] in queued_keys and action["key"] != "6" else ""
             if action["key"] == "2" and not subdomain_allowed:
                 print_green(f"  {action['key']}. [unavailable for IPs] {action['desc']}")
             elif action["key"] == "3" and not vhost_allowed:
@@ -281,9 +297,9 @@ def handle_http(target, port, queue, host_override, service="http"):
             else:
                 print_green(f"  {action['key']}.{mark} {action['desc']}{mark}")
 
-        choice = prompt_input("Select an option: ", "5")
+        choice = prompt_input("Select an option: ", "6")
 
-        if choice in queued_keys and choice != "5":
+        if choice in queued_keys and choice != "6":
             print_yellow("[*] That action is already queued. Please select another.")
             continue
 
@@ -316,6 +332,11 @@ def handle_http(target, port, queue, host_override, service="http"):
                 "function": lambda: subprocess.run(["xdg-open", url])
             })
         elif choice == "5":
+            queue.append({
+                "description": action_descriptions["5"],
+                "function": lambda: check_robots_txt(url)
+            })
+        elif choice == "6":
             print_green("[*] Done selecting actions for this port.")
             break
         else:

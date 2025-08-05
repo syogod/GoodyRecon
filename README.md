@@ -1,6 +1,6 @@
 # GoodyRecon
 
-GoodyRecon is an automated reconnaissance tool designed to help security professionals and enthusiasts quickly enumerate open ports and services on a target, and perform further actions such as directory brute-forcing, subdomain enumeration, vhost scanning, and HTTP analysis.
+GoodyRecon is an automated reconnaissance tool designed to help security professionals and enthusiasts quickly enumerate open ports and services on a target, and perform further actions such as directory brute-forcing, subdomain enumeration, vhost scanning, robots.txt checking, and HTTP analysis.
 
 ## Features
 
@@ -11,6 +11,7 @@ GoodyRecon is an automated reconnaissance tool designed to help security profess
   - Gobuster directory brute-forcing (with soft 404 detection)
   - Subdomain enumeration (Gobuster DNS mode)
   - Vhost enumeration (Gobuster vhost mode)
+  - robots.txt checking and output display
   - Browser opening
 - Handles soft 404 detection and offers to update `/etc/hosts` for redirecting hosts
 
